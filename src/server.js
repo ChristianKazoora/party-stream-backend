@@ -73,7 +73,7 @@ wss.on("connection", (ws) => {
     } else if (event.type === "link") {
       const videoId = uuidv4().substring(0, 8);
       const customEndpoint = `/video/${videoId}`;
-      const videoUrl = `${address}:${port}${customEndpoint}`;
+      const videoUrl = `${address}${customEndpoint}`;
       playbackState.currentLink = video.setMediaPath(event.link, videoUrl);
       playbackState.currentLink.includes(address)
         ? createVideoEndpoint(customEndpoint)
@@ -86,7 +86,7 @@ wss.on("connection", (ws) => {
     } else if (event.type === "subtitles") {
       const subtitleId = uuidv4().substring(0, 8);
       const customEndpoint = `/subtitles/${subtitleId}`;
-      const subtitleUrl = `${address}:${port}${customEndpoint}`;
+      const subtitleUrl = `${address}${customEndpoint}`;
       createSubtitlesEndpoint(customEndpoint);
       playbackState.subtitleLink = subtitleUrl;
       broadcast({
