@@ -1,6 +1,6 @@
 # Party Stream Backend
 
-This repository contains the backend code for the Party Stream application. The backend is built using Node.js and Express, and it handles video streaming, subtitle management, and WebSocket connections for real-time synchronization.
+This repository contains the backend code for the Party Stream application. It is built using Node.js and Express, and it handles video streaming, subtitle management, and WebSocket connections for real-time synchronization.
 
 ## Table of Contents
 
@@ -106,4 +106,5 @@ The server will be running on `http://0.0.0.0:1234` and WebSocket connections on
 - [lodash.debounce](https://www.npmjs.com/package/lodash.debounce)
 - [uuid](https://www.npmjs.com/package/uuid)
 - [websocket](https://www.npmjs.com/package/websocket)
+
 # party-stream-backend
