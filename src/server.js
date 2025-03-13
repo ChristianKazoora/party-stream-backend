@@ -6,11 +6,14 @@ const { v4: uuidv4 } = require("uuid"); // Add this line at the top to import uu
 const VideoHandler = require("./video-handler"); // Import VideoHandler
 const LinkHandlerDecorator = require("./decorators/LinkHandlerDecorator"); // Import the decorator
 const SubtitleHandler = require("./subtitlesHandler");
+const dotenv = require("dotenv");
+dotenv.config();
 const ipAddr = require("ip").address();
 const cors = require("cors");
 const app = express();
-const port = 1234;
-const address = "0.0.0.0";
+const port = process.env.BACKEND_PORT || 1234;
+const address = process.env.BACKEND_ADDRESS;
+const WebSocketPort = process.env.BACKEND_WEBSOCKET_PORT || 4321;
 let debouncedRequest;
 video = new LinkHandlerDecorator(new VideoHandler());
 subtitles = new SubtitleHandler();
@@ -31,7 +34,7 @@ let playbackState = {
   id: "",
 };
 
-const wss = new WebSocket.Server({ port: 4321 });
+const wss = new WebSocket.Server({ port: WebSocketPort });
 
 wss.on("connection", (ws) => {
   ws.id = uuidv4();
@@ -70,7 +73,7 @@ wss.on("connection", (ws) => {
     } else if (event.type === "link") {
       const videoId = uuidv4().substring(0, 8);
       const customEndpoint = `/video/${videoId}`;
-      const videoUrl = `http://${ipAddr}:${port}${customEndpoint}`;
+      const videoUrl = `${address}${customEndpoint}`;
       playbackState.currentLink = video.setMediaPath(event.link, videoUrl);
       playbackState.currentLink.includes(ipAddr)
         ? createVideoEndpoint(customEndpoint)
@@ -83,7 +86,7 @@ wss.on("connection", (ws) => {
     } else if (event.type === "subtitles") {
       const subtitleId = uuidv4().substring(0, 8);
       const customEndpoint = `/subtitles/${subtitleId}`;
-      const subtitleUrl = `http://${ipAddr}:${port}${customEndpoint}`;
+      const subtitleUrl = `${address}${customEndpoint}`;
       createSubtitlesEndpoint(customEndpoint);
       playbackState.subtitleLink = subtitleUrl;
       broadcast({
@@ -143,8 +146,8 @@ app.post("/add-subtitles", async (req, res) => {
 //   res.send(data);
 // });
 
-app.listen(port, address, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(
-    `Server is running on http://${address}:${port} and http://${ipAddr}:${port}`
+    `Server is running on http://0.0.0.0:${port} and http://${ipAddr}:${port}`
   );
 });
