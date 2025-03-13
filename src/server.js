@@ -17,7 +17,11 @@ const WebSocketPort = process.env.BACKEND_WEBSOCKET_PORT || 4321;
 let debouncedRequest;
 video = new LinkHandlerDecorator(new VideoHandler());
 subtitles = new SubtitleHandler();
-app.use(cors());
+app.use(
+  cors({
+    exposedHeaders: ["Content-Range", "Content-Length", "Accept-Ranges"],
+  })
+);
 app.use(express.json());
 
 let lastBroadcast = {
