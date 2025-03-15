@@ -13,6 +13,8 @@ class VideoHandler {
     this.rhd = new ResponseHandlerDecorator(this);
     this.isLocalstream = null;
     this.stream = null;
+    // Add these properties to cache content information per video URL
+    this.contentCache = new Map(); // Will store {url: {contentLength, etagValue}}
   }
   setMediaPath(videoPath) {
     this.videoPath = videoPath;
@@ -66,18 +68,26 @@ class VideoHandler {
         hostname: url.hostname,
         path: url.pathname + url.search,
         method: "HEAD",
+        headers: {
+          Accept: "*/*",
+          "Accept-Language": "en_US",
+          "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
+          Range: "bytes=0-",
+        },
       };
-
+      console.log("discoverContentLengthOptions", options);
       const headRequest = https.request(options, (res) => {
         if (res.statusCode === 200 || res.statusCode === 206) {
           const contentLength = parseInt(res.headers["content-length"], 10);
+          const etagValue = res.headers["etag"]; // lowercase is standard for HTTP headers
+
           if (!isNaN(contentLength)) {
-            resolve(contentLength);
+            resolve({ contentLength, etagValue });
           } else {
             console.warn(
               "Could not determine content length from HEAD request"
             );
-            resolve(null);
+            resolve({ contentLength: null, etagValue: null });
           }
         } else if (res.statusCode === 302 && res.headers.location) {
           // Follow redirect
@@ -86,41 +96,61 @@ class VideoHandler {
             .catch(reject);
         } else {
           console.warn(`HEAD request failed with status: ${res.statusCode}`);
-          resolve(null);
+          resolve({ contentLength: null, etagValue: null });
         }
       });
 
       headRequest.on("error", (err) => {
         console.error("Error in HEAD request:", err.message);
-        resolve(null);
+        resolve({ contentLength: null, etagValue: null });
       });
 
       headRequest.end();
     });
   }
   fetchWithRetry(req, res) {
+    // console.log("Request headers:", req.headers);
+
     return new Promise((resolve, reject) => {
       let knownContentLength = null;
-
+      let etagValue = null;
+      const videoURL = new URL(this.videoPath.link);
+      const urlString = videoURL.toString();
+      // Check if we already have cached content info for this URL
+      if (this.contentCache.has(urlString)) {
+        const cachedInfo = this.contentCache.get(urlString);
+        knownContentLength = cachedInfo.contentLength;
+        etagValue = cachedInfo.etagValue;
+        console.log(
+          `Using cached content info: length=${knownContentLength}, etag=${etagValue}`
+        );
+      }
       const attempt = async (n, contentLength = null) => {
         if (n <= 0) {
           return res.status(503).send("Attempt limit reached");
         }
 
         try {
-          const videoURL = new URL(this.videoPath.link);
           const range = req.headers.range;
           // Handle requests without Range header (like Postman)
           if (!range) {
             console.log(
               "No Range header provided - sending Accept-Ranges response"
             );
-            try {
-              knownContentLength = await this.discoverContentLength(videoURL);
-            } catch (err) {
-              console.error("Error discovering content length:", err);
+            if (knownContentLength === null) {
+              try {
+                const discover = await this.discoverContentLength(videoURL);
+                knownContentLength = discover?.contentLength || null;
+                etagValue = discover?.etagValue || null;
+                // Cache the discovered values
+                this.contentCache.set(urlString, {
+                  contentLength: knownContentLength,
+                  etagValue,
+                });
+              } catch (err) {
+                console.error("Error discovering content length:", err);
+              }
             }
-
             return res
               .status(200)
               .header({
@@ -137,10 +167,19 @@ class VideoHandler {
           // );
 
           // If we don't know content length yet, try to discover it
-          if (contentLength === null && knownContentLength === null && range) {
+          if (etagValue === null && knownContentLength === null && range) {
             try {
-              knownContentLength = await this.discoverContentLength(videoURL);
+              const discover = await this.discoverContentLength(videoURL);
+              knownContentLength = discover?.contentLength || null;
+              etagValue = discover?.etagValue || null;
               console.log(`Discovered content length: ${knownContentLength}`);
+              console.log(`Discovered etag value: ${etagValue}`);
+
+              // Cache the discovered values for future requests
+              this.contentCache.set(urlString, {
+                contentLength: knownContentLength,
+                etagValue,
+              });
             } catch (err) {
               console.error("Error discovering content length:", err);
             }
@@ -166,12 +205,28 @@ class VideoHandler {
             hostname: videoURL.hostname,
             path: videoURL.pathname + videoURL.search,
             method: "GET",
-            headers: sanitizedRange ? { Range: sanitizedRange } : {},
+            headers: {
+              Accept: "*/*",
+              "Accept-Language": "en_US",
+              "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
+            },
           };
+
+          // Add conditional headers
+          if (etagValue) {
+            options.headers["If-Match"] = etagValue;
+          }
+
+          if (sanitizedRange) {
+            options.headers["Range"] = sanitizedRange;
+          } else if (effectiveContentLength) {
+            options.headers["Range"] = `bytes=0-${effectiveContentLength - 1}`;
+          }
+          console.log("Options:", options);
 
           const externalRequest = https.request(options, (externalRes) => {
             const { statusCode, headers } = externalRes;
-
+            console.log("External response headers:", headers);
             // Check for content length in response headers
             if (headers["content-length"] && !knownContentLength) {
               knownContentLength = parseInt(headers["content-length"], 10);

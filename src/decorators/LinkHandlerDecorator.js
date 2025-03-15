@@ -8,7 +8,10 @@ class LinkHandlerDecorator {
   }
 
   setMediaPath(videoPath, genarateLink) {
-    let linkData = { link: videoPath, redirect: false };
+    let linkData = {
+      link: videoPath,
+      redirect: false,
+    };
     if (videoPath.includes("dropbox.com")) {
       linkData = dropbox(videoPath);
     } else if (videoPath.includes("youtube.com")) {
